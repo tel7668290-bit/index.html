@@ -81,7 +81,20 @@
                 });
                 saveAs(out, "里程計算完成表.docx");
             })
-            .catch(error => alert(error.message));
+            .catch(error => {
+                // 如果是 docxtemplater 的排版錯誤，把詳細原因抓出來
+                if (error.properties && error.properties.errors) {
+                    const errorMessages = error.properties.errors.map(e => {
+                        return `【錯誤原因】: ${e.message}\n【錯誤標籤】: ${e.properties.explanation || '未明'}`;
+                    }).join("\n\n");
+                    
+                    alert("❌ Word 範本偵測到以下錯誤：\n\n" + errorMessages);
+                    console.log(error.properties.errors);
+                } else {
+                    // 一般的檔案找不到或其它錯誤
+                    alert("系統錯誤: " + error.message);
+                }
+            });
     }
 </script>
 
