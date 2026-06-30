@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>里程補貼彈性生成器</title>
+    <title>交通費生成</title>
     <script src="https://unpkg.com/pizzip@3.1.4/dist/pizzip.js"></script>
     <script src="https://unpkg.com/docxtemplater@3.49.1/build/docxtemplater.js"></script>
     <script src="https://unpkg.com/file-saver@2.0.5/dist/FileSaver.min.js"></script>
@@ -40,7 +40,7 @@
     <div class="hint">
         💡 <b>操作說明：</b><br>
         1. 點擊「➕ 新增員工項目」可無限擴充人數。<br>
-        2. 輸入日期時請用「、」頓號隔開（例如：6/3、6/5），右側會<b>即時自動計算</b>天數與金額！
+        2. 輸入日期時請用<b>「,」逗號</b>隔開（例如：6/3,6/5），右側會即時自動計算天數與金額！(中英文逗號皆可通)
     </div>
     
     <div id="employee-container"></div>
@@ -64,7 +64,7 @@
         row.innerHTML = `
             <span class="row-num"></span>
             <input type="text" class="inp-name" placeholder="員工姓名">
-            <input type="text" class="inp-dates" placeholder="出差日期 (例: 6/3、6/5)" oninput="updateRowCalc(${rowIdCounter})">
+            <input type="text" class="inp-dates" placeholder="出差日期 (例: 6/3,6/5)" oninput="updateRowCalc(${rowIdCounter})">
             <div class="row-calc">
                 共 <strong id="days-${rowIdCounter}">0</strong> 天 / 
                 <strong>$</strong><strong id="amount-${rowIdCounter}">0</strong> 元
@@ -85,7 +85,7 @@
         }
     }
 
-    // 重新排列編號 (1. 2. 3...)
+    // 重新排列編號
     function reindexRows() {
         const rows = document.querySelectorAll('.employee-row');
         rows.forEach((row, index) => {
@@ -93,23 +93,28 @@
         });
     }
 
-    // 即時計算天數與金額
+    // 自動計算天數與金額的邏輯 (已改為識別中英文逗號)
+    function calcData(dateStr) {
+        if (!dateStr || !dateStr.trim()) return { days: 0, amount: 0 };
+        
+        // 關鍵修改：將中文全形「，」一律替換成英文半形「,」
+        const normalized = dateStr.replace(/，/g, ',');
+        
+        // 用逗號切開計算有幾天
+        const days = normalized.split(',').filter(d => d.trim() !== "").length;
+        const amount = Number((days * 26.4).toFixed(1)); 
+        return { days, amount };
+    }
+
+    // 即時更新畫面數字
     function updateRowCalc(id) {
         const row = document.getElementById(`row-${id}`);
         const dateStr = row.querySelector('.inp-dates').value;
         
-        if (!dateStr || !dateStr.trim()) {
-            document.getElementById(`days-${id}`).innerText = "0";
-            document.getElementById(`amount-${id}`).innerText = "0";
-            return;
-        }
+        const result = calcData(dateStr);
         
-        // 計算頓號個數
-        const days = dateStr.split('、').filter(d => d.trim() !== "").length;
-        const amount = (days * 26.4).toFixed(1);
-        
-        document.getElementById(`days-${id}`).innerText = days;
-        document.getElementById(`amount-${id}`).innerText = amount;
+        document.getElementById(`days-${id}`).innerText = result.days;
+        document.getElementById(`amount-${id}`).innerText = result.amount;
     }
 
     // 讀取網頁資料並生成 Word
@@ -122,17 +127,15 @@
             const dates = row.querySelector('.inp-dates').value.trim();
             const id = row.id.replace('row-', '');
             
-            // 只要有填名字或日期就抓取
             if (name || dates) {
-                const days = document.getElementById(`days-${id}`).innerText;
-                const amount = document.getElementById(`amount-${id}`).innerText;
+                const result = calcData(dates);
                 
                 items.push({
                     no: index + 1,
                     name: name,
-                    dates: dates,
-                    days: days,
-                    amount: amount
+                    dates: dates, // 這裡會保留您原本輸入的逗號樣式直接印在 Word 上
+                    days: result.days,
+                    amount: result.amount
                 });
             }
         });
@@ -142,7 +145,6 @@
             return;
         }
 
-        // 讀取同目錄下的 Word 範本
         fetch('template.docx')
             .then(response => {
                 if (!response.ok) throw new Error('找不到 template.docx 範本檔案！');
@@ -152,14 +154,13 @@
                 const zip = new PizZip(buffer);
                 const doc = new window.docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
 
-                // 把整包陣列丟進去 Word 範本的 {#items} 迴圈中
                 doc.render({ items: items });
 
                 const out = doc.getZip().generate({
                     type: "blob",
                     mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 });
-                saveAs(out, "里程補貼明細表_動態生成.docx");
+                saveAs(out, "里程補貼明細表_自動生成.docx");
             })
             .catch(error => {
                 if (error.properties && error.properties.errors) {
@@ -170,7 +171,6 @@
             });
     }
 
-    // 網頁開啟時預設先送出一個空白行供填寫
     window.onload = function() {
         addEmployeeRow();
     };
