@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>里程補貼自動生成器</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pizzip/3.1.4/pizzip.min.js"></script>
+    <script src="https://unpkg.com/docxtemplater@3.49.1/build/docxtemplater.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; background-color: #f4f7f6; }
+        .container { max-width: 600px; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h2 { color: #333; border-bottom: 2px solid #4CAF50; padding-bottom: 10px; }
+        .input-group { margin-bottom: 20px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; color: #555; }
+        input[type="text"] { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+        button { background-color: #4CAF50; color: white; padding: 12px 20px; border: none; border-radius: 4px; cursor: pointer; width: 100%; font-size: 16px; }
+        button:hover { background-color: #45a049; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>🚗 里程補貼 Word 自動生成器</h2>
+    <p style="color: #666; font-size: 14px;">請輸入出差日期（多個日期請用「、」頓號隔開）</p>
+    
+    <div class="input-group">
+        <label>1. 林詒泰 的日期：</label>
+        <input type="text" id="lin_dates" placeholder="例如: 6/3、6/5、6/10">
+    </div>
+
+    <div class="input-group">
+        <label>2. 謝旻諺 的日期：</label>
+        <input type="text" id="hsie_dates" placeholder="例如: 6/3、6/5、6/10">
+    </div>
+
+    <button onclick="generateWord()">一秒生成 Word 報表</button>
+</div>
+
+<script>
+    // 計算日期的核心邏輯
+    function calcData(dateStr) {
+        if (!dateStr.trim()) return { days: 0, amount: 0 };
+        // 用頓號切開，計算有幾天
+        const days = dateStr.split('、').filter(d => d.trim() !== "").length;
+        const amount = (days * 26.4).toFixed(1); // 四捨五入到小數點第一位
+        return { days, amount };
+    }
+
+    function generateWord() {
+        // 1. 抓取網頁上輸入的文字
+        const linDates = document.getElementById('lin_dates').value;
+        const hsieDates = document.getElementById('hsie_dates').value;
+
+        // 2. 自動算好天數與金額
+        const lin = calcData(linDates);
+        const hsie = calcData(hsieDates);
+
+        // 3. 讀取同目錄下的 Word 範本檔
+        fetch('template.docx')
+            .then(response => {
+                if (!response.ok) throw new Error('找不到 template.docx 範本檔案！');
+                return response.arrayBuffer();
+            })
+            .then(buffer => {
+                const zip = new PizZip(buffer);
+                const doc = new window.docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
+
+                // 4. 把算好的資料，無痕塞進 Word 的 {{對應標籤}} 裡
+                doc.render({
+                    lin_dates: linDates,  lin_days: lin.days,  lin_amount: lin.amount,
+                    hsie_dates: hsieDates, hsie_days: hsie.days, hsie_amount: hsie.amount
+                });
+
+                // 5. 輸出成新的 Word 檔案並自動下載
+                const out = doc.getZip().generate({
+                    type: "blob",
+                    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                });
+                saveAs(out, "里程計算完成表.docx");
+            })
+            .catch(error => alert(error.message));
+    }
+</script>
+
+</body>
+</html>
