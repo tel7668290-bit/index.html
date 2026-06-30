@@ -3,62 +3,146 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>里程補貼自動生成器</title>
-   <!-- 讓網頁直接讀取你自己 GitHub 庫裡的檔案，100% 不會被防火牆擋 -->
-<script src="pizzip.js"></script>
-<script src="docxtemplater.js"></script>
-<script src="FileSaver.js"></script>
+    <title>里程補貼彈性生成器</title>
+    <script src="https://unpkg.com/pizzip@3.1.4/dist/pizzip.js"></script>
+    <script src="https://unpkg.com/docxtemplater@3.49.1/build/docxtemplater.js"></script>
+    <script src="https://unpkg.com/file-saver@2.0.5/dist/FileSaver.min.js"></script>
     
     <style>
-        body { font-family: Arial, sans-serif; margin: 40px; background-color: #f4f7f6; }
-        .container { max-width: 600px; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-        h2 { color: #333; border-bottom: 2px solid #4CAF50; padding-bottom: 10px; }
-        .input-group { margin-bottom: 20px; }
-        label { display: block; font-weight: bold; margin-bottom: 5px; color: #555; }
-        input[type="text"] { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
-        button { background-color: #4CAF50; color: white; padding: 12px 20px; border: none; border-radius: 4px; cursor: pointer; width: 100%; font-size: 16px; }
-        button:hover { background-color: #45a049; }
+        body { font-family: "Microsoft JhengHei", Arial, sans-serif; margin: 40px; background-color: #f4f7f6; }
+        .container { max-width: 750px; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); margin: 0 auto; }
+        h2 { color: #333; border-bottom: 2px solid #2b579a; padding-bottom: 10px; margin-top: 0; }
+        .hint { color: #666; font-size: 14px; margin-bottom: 25px; background: #f0f4f8; padding: 12px; border-radius: 4px; border-left: 4px solid #2b579a; }
+        
+        /* 動態欄位樣式 */
+        .employee-row { display: flex; align-items: center; background: #fff; padding: 12px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 6px; gap: 10px; }
+        .row-num { font-weight: bold; color: #2b579a; width: 25px; text-align: center; }
+        input[type="text"] { padding: 8px 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+        .inp-name { width: 120px; }
+        .inp-dates { flex-grow: 1; }
+        .row-calc { font-size: 13px; color: #555; background: #f9f9f9; padding: 6px 10px; border-radius: 4px; white-space: nowrap; }
+        .row-calc strong { color: #e04f5f; }
+        
+        /* 按鈕樣式 */
+        button { cursor: pointer; font-weight: bold; border-radius: 4px; font-size: 14px; }
+        .btn-add { background-color: #217346; color: white; padding: 10px 15px; border: none; margin-bottom: 20px; display: inline-flex; align-items: center; gap: 5px; }
+        .btn-add:hover { background-color: #164e30; }
+        .btn-delete { background-color: #fff; color: #ff4d4d; border: 1px solid #ff4d4d; padding: 6px 10px; font-size: 16px; border-radius: 4px; }
+        .btn-delete:hover { background-color: #ff4d4d; color: white; }
+        .btn-submit { background-color: #2b579a; color: white; padding: 14px 20px; border: none; width: 100%; font-size: 16px; margin-top: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .btn-submit:hover { background-color: #1b365d; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>🚗 里程補貼 Word 自動生成器</h2>
-    <p style="color: #666; font-size: 14px;">請輸入出差日期（多個日期請用「、」頓號隔開）</p>
+    <h2>🚗 里程補貼 Word 自動生成器 (彈性名冊版)</h2>
+    <div class="hint">
+        💡 <b>操作說明：</b><br>
+        1. 點擊「➕ 新增員工項目」可無限擴充人數。<br>
+        2. 輸入日期時請用「、」頓號隔開（例如：6/3、6/5），右側會<b>即時自動計算</b>天數與金額！
+    </div>
     
-    <div class="input-group">
-        <label>1. 林詒泰 的日期：</label>
-        <input type="text" id="lin_dates" placeholder="例如: 6/3、6/5、6/10">
-    </div>
+    <div id="employee-container"></div>
 
-    <div class="input-group">
-        <label>2. 謝旻諺 的日期：</label>
-        <input type="text" id="hsie_dates" placeholder="例如: 6/3、6/5、6/10">
-    </div>
-
-    <button onclick="generateWord()">一秒生成 Word 報表</button>
+    <button type="button" class="btn-add" onclick="addEmployeeRow()">➕ 新增員工項目</button>
+    <button type="button" class="btn-submit" onclick="generateWord()">一秒生成 Word 報表</button>
 </div>
 
 <script>
-    // 計算日期的核心邏輯
-    function calcData(dateStr) {
-        if (!dateStr.trim()) return { days: 0, amount: 0 };
-        // 用頓號切開，計算有幾天
-        const days = dateStr.split('、').filter(d => d.trim() !== "").length;
-        const amount = (days * 26.4).toFixed(1); // 四捨五入到小數點第一位
-        return { days, amount };
+    let rowIdCounter = 0;
+
+    // 自動新增一行輸入框
+    function addEmployeeRow() {
+        rowIdCounter++;
+        const container = document.getElementById('employee-container');
+        
+        const row = document.createElement('div');
+        row.className = 'employee-row';
+        row.id = `row-${rowIdCounter}`;
+        
+        row.innerHTML = `
+            <span class="row-num"></span>
+            <input type="text" class="inp-name" placeholder="員工姓名">
+            <input type="text" class="inp-dates" placeholder="出差日期 (例: 6/3、6/5)" oninput="updateRowCalc(${rowIdCounter})">
+            <div class="row-calc">
+                共 <strong id="days-${rowIdCounter}">0</strong> 天 / 
+                <strong>$</strong><strong id="amount-${rowIdCounter}">0</strong> 元
+            </div>
+            <button type="button" class="btn-delete" onclick="removeRow(${rowIdCounter})">×</button>
+        `;
+        
+        container.appendChild(row);
+        reindexRows();
     }
 
+    // 刪除某一行
+    function removeRow(id) {
+        const row = document.getElementById(`row-${id}`);
+        if (row) {
+            row.remove();
+            reindexRows();
+        }
+    }
+
+    // 重新排列編號 (1. 2. 3...)
+    function reindexRows() {
+        const rows = document.querySelectorAll('.employee-row');
+        rows.forEach((row, index) => {
+            row.querySelector('.row-num').innerText = `${index + 1}.`;
+        });
+    }
+
+    // 即時計算天數與金額
+    function updateRowCalc(id) {
+        const row = document.getElementById(`row-${id}`);
+        const dateStr = row.querySelector('.inp-dates').value;
+        
+        if (!dateStr || !dateStr.trim()) {
+            document.getElementById(`days-${id}`).innerText = "0";
+            document.getElementById(`amount-${id}`).innerText = "0";
+            return;
+        }
+        
+        // 計算頓號個數
+        const days = dateStr.split('、').filter(d => d.trim() !== "").length;
+        const amount = (days * 26.4).toFixed(1);
+        
+        document.getElementById(`days-${id}`).innerText = days;
+        document.getElementById(`amount-${id}`).innerText = amount;
+    }
+
+    // 讀取網頁資料並生成 Word
     function generateWord() {
-        // 1. 抓取網頁上輸入的文字
-        const linDates = document.getElementById('lin_dates').value;
-        const hsieDates = document.getElementById('hsie_dates').value;
+        const rows = document.querySelectorAll('.employee-row');
+        const items = [];
+        
+        rows.forEach((row, index) => {
+            const name = row.querySelector('.inp-name').value.trim();
+            const dates = row.querySelector('.inp-dates').value.trim();
+            const id = row.id.replace('row-', '');
+            
+            // 只要有填名字或日期就抓取
+            if (name || dates) {
+                const days = document.getElementById(`days-${id}`).innerText;
+                const amount = document.getElementById(`amount-${id}`).innerText;
+                
+                items.push({
+                    no: index + 1,
+                    name: name,
+                    dates: dates,
+                    days: days,
+                    amount: amount
+                });
+            }
+        });
+        
+        if (items.length === 0) {
+            alert("❌ 請至少新增一筆員工資料再匯出！");
+            return;
+        }
 
-        // 2. 自動算好天數與金額
-        const lin = calcData(linDates);
-        const hsie = calcData(hsieDates);
-
-        // 3. 讀取同目錄下的 Word 範本檔
+        // 讀取同目錄下的 Word 範本
         fetch('template.docx')
             .then(response => {
                 if (!response.ok) throw new Error('找不到 template.docx 範本檔案！');
@@ -68,34 +152,28 @@
                 const zip = new PizZip(buffer);
                 const doc = new window.docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
 
-                // 4. 把算好的資料，無痕塞進 Word 的 {{對應標籤}} 裡
-                doc.render({
-                    lin_dates: linDates,  lin_days: lin.days,  lin_amount: lin.amount,
-                    hsie_dates: hsieDates, hsie_days: hsie.days, hsie_amount: hsie.amount
-                });
+                // 把整包陣列丟進去 Word 範本的 {#items} 迴圈中
+                doc.render({ items: items });
 
-                // 5. 輸出成新的 Word 檔案並自動下載
                 const out = doc.getZip().generate({
                     type: "blob",
                     mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 });
-                saveAs(out, "里程計算完成表.docx");
+                saveAs(out, "里程補貼明細表_動態生成.docx");
             })
             .catch(error => {
-                // 如果是 docxtemplater 的排版錯誤，把詳細原因抓出來
                 if (error.properties && error.properties.errors) {
-                    const errorMessages = error.properties.errors.map(e => {
-                        return `【錯誤原因】: ${e.message}\n【錯誤標籤】: ${e.properties.explanation || '未明'}`;
-                    }).join("\n\n");
-                    
-                    alert("❌ Word 範本偵測到以下錯誤：\n\n" + errorMessages);
-                    console.log(error.properties.errors);
+                    alert("❌ Word 範本格式錯誤，請檢查是否有依照說明設定 { #items } 與 { /items } ！");
                 } else {
-                    // 一般的檔案找不到或其它錯誤
                     alert("系統錯誤: " + error.message);
                 }
             });
     }
+
+    // 網頁開啟時預設先送出一個空白行供填寫
+    window.onload = function() {
+        addEmployeeRow();
+    };
 </script>
 
 </body>
